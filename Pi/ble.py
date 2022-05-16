@@ -26,7 +26,7 @@ logger.addHandler(logHandler)
 
 logger.setLevel(logging.DEBUG)
 
-def find_adapter(bus):
+def find_gatt_manager(bus):
     """
     Returns the first object that the bluez service has that has a GattManager1 interface
     """

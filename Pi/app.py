@@ -12,13 +12,12 @@ from ble import (
     Characteristic,
     Service,
     Application,
-    find_adapter,
+    find_gatt_manager,
     Descriptor,
     Agent,
 )
 
 import struct
-import requests
 import array
 from enum import Enum
 
@@ -43,9 +42,6 @@ logHandler.setFormatter(formatter)
 filelogHandler.setFormatter(formatter)
 logger.addHandler(filelogHandler)
 logger.addHandler(logHandler)
-
-
-VivaldiBaseUrl = "XXXXXXXXXXXX"
 
 mainloop = None
 
@@ -75,33 +71,31 @@ class FailedException(dbus.exceptions.DBusException):
     _dbus_error_name = "org.bluez.Error.Failed"
 
 
-def register_app_cb():
+def register_application_callback():
     logger.info("GATT application registered")
 
 
-def register_app_error_cb(error):
-    logger.critical("Failed to register the application: " + str(error))
+def register_application_error_callback(error):
+    logger.critical("Failed to register application: " + str(error))
     mainloop.quit()
 
 
-class VivaldiS1Service(Service):
+class GardenerService(Service):
     """
     Dummy test service that provides characteristics and descriptors that
     exercise various API functionality.
 
     """
 
-    ESPRESSO_SVC_UUID = "12634d89-d598-4874-8e86-7d042ee07ba7"
+    GARDENER_SVC_UUID = "a0445a21-158f-4ca8-840d-6ec56ca58962"
 
     def __init__(self, bus, index):
-        Service.__init__(self, bus, index, self.ESPRESSO_SVC_UUID, True)
-        self.add_characteristic(PowerControlCharacteristic(bus, 0, self))
-        self.add_characteristic(BoilerControlCharacteristic(bus, 1, self))
-        self.add_characteristic(AutoOffCharacteristic(bus, 2, self))
+        Service.__init__(self, bus, index, self.GARDENER_SVC_UUID, True)
+        self.add_characteristic(WaterPlantsCharacteristic(bus, 0, self))
 
 
-class PowerControlCharacteristic(Characteristic):
-    uuid = "4116f8d2-9f66-4f58-a53d-fc7440e7c14e"
+class WaterPlantsCharacteristic(Characteristic):
+    uuid = "7e709c77-1844-46e7-8fd0-27b0b2382ee8"
     description = b"Get/set machine power state {'ON', 'OFF', 'UNKNOWN'}"
 
     class State(Enum):
@@ -113,8 +107,6 @@ class PowerControlCharacteristic(Characteristic):
         def has_value(cls, value):
             return value in cls._value2member_map_
 
-    power_options = {"ON", "OFF", "UNKNOWN"}
-
     def __init__(self, bus, index, service):
         Characteristic.__init__(
             self, bus, index, self.uuid, ["encrypt-read", "encrypt-write"], service,
@@ -124,11 +116,10 @@ class PowerControlCharacteristic(Characteristic):
         self.add_descriptor(CharacteristicUserDescriptionDescriptor(bus, 1, self))
 
     def ReadValue(self, options):
-        logger.debug("power Read: " + repr(self.value))
+        logger.debug("WaterPlantsCharacteristic read: " + repr(self.value))
         res = None
         try:
-            res = requests.get(VivaldiBaseUrl + "/vivaldi")
-            self.value = bytearray(res.json()["machine"], encoding="utf8")
+            self.value = bytearray(self.State.off, encoding="utf8")
         except Exception as e:
             logger.error(f"Error getting status {e}")
             self.value = bytearray(self.State.unknown, encoding="utf8")
@@ -136,97 +127,25 @@ class PowerControlCharacteristic(Characteristic):
         return self.value
 
     def WriteValue(self, value, options):
-        logger.debug("power Write: " + repr(value))
+        logger.debug("WaterPlantsCharacteristic write: " + repr(value))
         cmd = bytes(value).decode("utf-8")
-        if self.State.has_value(cmd):
-            # write it to machine
-            logger.info("writing {cmd} to machine")
-            data = {"cmd": cmd.lower()}
-            try:
-                res = requests.post(VivaldiBaseUrl + "/vivaldi/cmds", json=data)
-            except Exceptions as e:
-                logger.error(f"Error updating machine state: {e}")
-        else:
-            logger.info(f"invalid state written {cmd}")
-            raise NotPermittedException
+
+        # if self.State.has_value(cmd):
+        #     # write it to machine
+        #     logger.info("writing {cmd} to machine")
+        #     data = {"cmd": cmd.lower()}
+        #     try:
+        #         res = requests.post(VivaldiBaseUrl + "/vivaldi/cmds", json=data)
+        #     except Exceptions as e:
+        #         logger.error(f"Error updating machine state: {e}")
+        # else:
+        #     logger.info(f"invalid state written {cmd}")
+        #     raise NotPermittedException
+
+
+        logger.debug("I'm gonna water the plants")
 
         self.value = value
-
-
-class BoilerControlCharacteristic(Characteristic):
-    uuid = "322e774f-c909-49c4-bd7b-48a4003a967f"
-    description = b"Get/set boiler power state can be `on` or `off`"
-
-    def __init__(self, bus, index, service):
-        Characteristic.__init__(
-            self, bus, index, self.uuid, ["encrypt-read", "encrypt-write"], service,
-        )
-
-        self.value = []
-        self.add_descriptor(CharacteristicUserDescriptionDescriptor(bus, 1, self))
-
-    def ReadValue(self, options):
-        logger.info("boiler read: " + repr(self.value))
-        res = None
-        try:
-            res = requests.get(VivaldiBaseUrl + "/vivaldi")
-            self.value = bytearray(res.json()["boiler"], encoding="utf8")
-        except Exception as e:
-            logger.error(f"Error getting status {e}")
-
-        return self.value
-
-    def WriteValue(self, value, options):
-        logger.info("boiler state Write: " + repr(value))
-        cmd = bytes(value).decode("utf-8")
-
-        # write it to machine
-        logger.info("writing {cmd} to machine")
-        data = {"cmd": "setboiler", "state": cmd.lower()}
-        try:
-            res = requests.post(VivaldiBaseUrl + "/vivaldi/cmds", json=data)
-            logger.info(res)
-        except Exceptions as e:
-            logger.error(f"Error updating machine state: {e}")
-            raise
-
-
-class AutoOffCharacteristic(Characteristic):
-    uuid = "9c7dbce8-de5f-4168-89dd-74f04f4e5842"
-    description = b"Get/set autoff time in minutes"
-
-    def __init__(self, bus, index, service):
-        Characteristic.__init__(
-            self, bus, index, self.uuid, ["secure-read", "secure-write"], service,
-        )
-
-        self.value = []
-        self.add_descriptor(CharacteristicUserDescriptionDescriptor(bus, 1, self))
-
-    def ReadValue(self, options):
-        logger.info("auto off read: " + repr(self.value))
-        res = None
-        try:
-            res = requests.get(VivaldiBaseUrl + "/vivaldi")
-            self.value = bytearray(struct.pack("i", int(res.json()["autoOffMinutes"])))
-        except Exception as e:
-            logger.error(f"Error getting status {e}")
-
-        return self.value
-
-    def WriteValue(self, value, options):
-        logger.info("auto off write: " + repr(value))
-        cmd = bytes(value)
-
-        # write it to machine
-        logger.info("writing {cmd} to machine")
-        data = {"cmd": "autoOffMinutes", "time": struct.unpack("i", cmd)[0]}
-        try:
-            res = requests.post(VivaldiBaseUrl + "/vivaldi/cmds", json=data)
-            logger.info(res)
-        except Exceptions as e:
-            logger.error(f"Error updating machine state: {e}")
-            raise
 
 
 class CharacteristicUserDescriptionDescriptor(Descriptor):
@@ -253,28 +172,27 @@ class CharacteristicUserDescriptionDescriptor(Descriptor):
         self.value = value
 
 
-class VivaldiAdvertisement(Advertisement):
+class GardenerAdvertisement(Advertisement):
     def __init__(self, bus, index):
         Advertisement.__init__(self, bus, index, "peripheral")
         self.add_manufacturer_data(
-            0xFFFF, [0x70, 0x74],
+            0xFFFF, [0x64, 0x61, 0x76, 0x65],
         )
-        self.add_service_uuid(VivaldiS1Service.ESPRESSO_SVC_UUID)
-
-        self.add_local_name("Vivaldi")
+        self.add_service_uuid(GardenerService.GARDENER_SVC_UUID)
+        self.add_local_name("Gardener")
         self.include_tx_power = True
 
 
-def register_ad_cb():
+def register_advertisement_callback():
     logger.info("Advertisement registered")
 
 
-def register_ad_error_cb(error):
+def register_advertisement_error_callback(error):
     logger.critical("Failed to register advertisement: " + str(error))
     mainloop.quit()
 
 
-AGENT_PATH = "/com/punchthrough/agent"
+AGENT_PATH = "/dave/agent"
 
 
 def main():
@@ -285,50 +203,44 @@ def main():
     # get the system bus
     bus = dbus.SystemBus()
     # get the ble controller
-    adapter = find_adapter(bus)
+    gatt_manager = find_gatt_manager(bus)
 
-    if not adapter:
+    if not gatt_manager:
         logger.critical("GattManager1 interface not found")
         return
 
-    adapter_obj = bus.get_object(BLUEZ_SERVICE_NAME, adapter)
+    bluez_thing = bus.get_object(BLUEZ_SERVICE_NAME, gatt_manager)
 
-    adapter_props = dbus.Interface(adapter_obj, "org.freedesktop.DBus.Properties")
+    bluetooth_adapter_props = dbus.Interface(bluez_thing, "org.freedesktop.DBus.Properties")
+    bluetooth_adapter_props.Set("org.bluez.Adapter1", "Powered", dbus.Boolean(1))
 
-    # powered property on the controller to on
-    adapter_props.Set("org.bluez.Adapter1", "Powered", dbus.Boolean(1))
-
-    # Get manager objs
-    service_manager = dbus.Interface(adapter_obj, GATT_MANAGER_IFACE)
-    ad_manager = dbus.Interface(adapter_obj, LE_ADVERTISING_MANAGER_IFACE)
-
-    advertisement = VivaldiAdvertisement(bus, 0)
     obj = bus.get_object(BLUEZ_SERVICE_NAME, "/org/bluez")
-
-    agent = Agent(bus, AGENT_PATH)
-
-    app = Application(bus)
-    app.add_service(VivaldiS1Service(bus, 2))
 
     mainloop = MainLoop()
 
+    agent = Agent(bus, AGENT_PATH)
     agent_manager = dbus.Interface(obj, "org.bluez.AgentManager1")
     agent_manager.RegisterAgent(AGENT_PATH, "NoInputNoOutput")
 
-    ad_manager.RegisterAdvertisement(
+    logger.info("Registering advertisment...")
+    advertisement = GardenerAdvertisement(bus, 0)
+    advertising_manager = dbus.Interface(bluez_thing, LE_ADVERTISING_MANAGER_IFACE)
+    advertising_manager.RegisterAdvertisement(
         advertisement.get_path(),
         {},
-        reply_handler=register_ad_cb,
-        error_handler=register_ad_error_cb,
+        reply_handler=register_advertisement_callback,
+        error_handler=register_advertisement_error_callback,
     )
 
     logger.info("Registering GATT application...")
-
-    service_manager.RegisterApplication(
-        app.get_path(),
+    application = Application(bus)
+    application.add_service(GardenerService(bus, 2))
+    gatt_manager = dbus.Interface(bluez_thing, GATT_MANAGER_IFACE)
+    gatt_manager.RegisterApplication(
+        application.get_path(),
         {},
-        reply_handler=register_app_cb,
-        error_handler=[register_app_error_cb],
+        reply_handler=register_application_callback,
+        error_handler=[register_application_error_callback],
     )
 
     agent_manager.RequestDefaultAgent(AGENT_PATH)
