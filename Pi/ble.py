@@ -1,43 +1,53 @@
-
 import dbus
-
 import logging
 import sys
 
-DBUS_OM_IFACE = "org.freedesktop.DBus.ObjectManager"
-DBUS_PROP_IFACE = "org.freedesktop.DBus.Properties"
 
-GATT_SERVICE_IFACE = "org.bluez.GattService1"
-GATT_CHRC_IFACE = "org.bluez.GattCharacteristic1"
-GATT_DESC_IFACE = "org.bluez.GattDescriptor1"
-
-LE_ADVERTISING_MANAGER_IFACE = "org.bluez.LEAdvertisingManager1"
-LE_ADVERTISEMENT_IFACE = "org.bluez.LEAdvertisement1"
+# constants for dbus & BlueZ
+DBUS_OBJECT_MANAGER_INTERFACE = "org.freedesktop.DBus.ObjectManager"
+DBUS_PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties"
 
 BLUEZ_SERVICE_NAME = "org.bluez"
-GATT_MANAGER_IFACE = "org.bluez.GattManager1"
+
+GATT_SERVICE_INTERFACE = "org.bluez.GattService1"
+GATT_CHARACTERISTIC_INTERFACE = "org.bluez.GattCharacteristic1"
+GATT_DESCRIPTOR_INTERFACE = "org.bluez.GattDescriptor1"
+GATT_MANAGER_INTERFACE = "org.bluez.GattManager1"
+
+LE_ADVERTISING_MANAGER_INTERFACE = "org.bluez.LEAdvertisingManager1"
+LE_ADVERTISEMENT_INTERFACE = "org.bluez.LEAdvertisement1"
+
+BLUEZ_AGENT_INTERFACE = "org.bluez.Agent1"
+
+
+# set up logging
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+logHandler = logging.StreamHandler()
+logHandler.setFormatter(formatter)
+
+filelogHandler = logging.FileHandler("gardener.log")
+filelogHandler.setFormatter(formatter)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-logHandler = logging.StreamHandler()
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logHandler.setFormatter(formatter)
 logger.addHandler(logHandler)
+logger.addHandler(filelogHandler)
 
-logger.setLevel(logging.DEBUG)
 
 def find_gatt_manager(bus):
     """
-    Returns the first object that the bluez service has that has a GattManager1 interface
+    Returns the first object managed by the BlueZ service that implements GattManager1
     """
-    remote_om = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, "/"), DBUS_OM_IFACE)
+    remote_om = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, "/"), DBUS_OBJECT_MANAGER_INTERFACE)
     objects = remote_om.GetManagedObjects()
 
     for o, props in objects.items():
-        if GATT_MANAGER_IFACE in props.keys():
+        if GATT_MANAGER_INTERFACE in props.keys():
             return o
 
     return None
+
 
 class Application(dbus.service.Object):
     """
@@ -57,7 +67,7 @@ class Application(dbus.service.Object):
     def add_service(self, service):
         self.services.append(service)
 
-    @dbus.service.method(DBUS_OM_IFACE, out_signature="a{oa{sa{sv}}}")
+    @dbus.service.method(DBUS_OBJECT_MANAGER_INTERFACE, out_signature="a{oa{sa{sv}}}")
     def GetManagedObjects(self):
         response = {}
         logger.info("GetManagedObjects")
@@ -91,7 +101,7 @@ class Service(dbus.service.Object):
 
     def get_properties(self):
         return {
-            GATT_SERVICE_IFACE: {
+            GATT_SERVICE_INTERFACE: {
                 "UUID": self.uuid,
                 "Primary": self.primary,
                 "Characteristics": dbus.Array(
@@ -115,12 +125,12 @@ class Service(dbus.service.Object):
     def get_characteristics(self):
         return self.characteristics
 
-    @dbus.service.method(DBUS_PROP_IFACE, in_signature="s", out_signature="a{sv}")
+    @dbus.service.method(DBUS_PROPERTIES_INTERFACE, in_signature="s", out_signature="a{sv}")
     def GetAll(self, interface):
-        if interface != GATT_SERVICE_IFACE:
+        if interface != GATT_SERVICE_INTERFACE:
             raise InvalidArgsException()
 
-        return self.get_properties()[GATT_SERVICE_IFACE]
+        return self.get_properties()[GATT_SERVICE_INTERFACE]
 
 
 class Characteristic(dbus.service.Object):
@@ -139,7 +149,7 @@ class Characteristic(dbus.service.Object):
 
     def get_properties(self):
         return {
-            GATT_CHRC_IFACE: {
+            GATT_CHARACTERISTIC_INTERFACE: {
                 "Service": self.service.get_path(),
                 "UUID": self.uuid,
                 "Flags": self.flags,
@@ -162,34 +172,34 @@ class Characteristic(dbus.service.Object):
     def get_descriptors(self):
         return self.descriptors
 
-    @dbus.service.method(DBUS_PROP_IFACE, in_signature="s", out_signature="a{sv}")
+    @dbus.service.method(DBUS_PROPERTIES_INTERFACE, in_signature="s", out_signature="a{sv}")
     def GetAll(self, interface):
-        if interface != GATT_CHRC_IFACE:
+        if interface != GATT_CHARACTERISTIC_INTERFACE:
             raise InvalidArgsException()
 
-        return self.get_properties()[GATT_CHRC_IFACE]
+        return self.get_properties()[GATT_CHARACTERISTIC_INTERFACE]
 
-    @dbus.service.method(GATT_CHRC_IFACE, in_signature="a{sv}", out_signature="ay")
+    @dbus.service.method(GATT_CHARACTERISTIC_INTERFACE, in_signature="a{sv}", out_signature="ay")
     def ReadValue(self, options):
         logger.info("Default ReadValue called, returning error")
         raise NotSupportedException()
 
-    @dbus.service.method(GATT_CHRC_IFACE, in_signature="aya{sv}")
+    @dbus.service.method(GATT_CHARACTERISTIC_INTERFACE, in_signature="aya{sv}")
     def WriteValue(self, value, options):
         logger.info("Default WriteValue called, returning error")
         raise NotSupportedException()
 
-    @dbus.service.method(GATT_CHRC_IFACE)
+    @dbus.service.method(GATT_CHARACTERISTIC_INTERFACE)
     def StartNotify(self):
         logger.info("Default StartNotify called, returning error")
         raise NotSupportedException()
 
-    @dbus.service.method(GATT_CHRC_IFACE)
+    @dbus.service.method(GATT_CHARACTERISTIC_INTERFACE)
     def StopNotify(self):
         logger.info("Default StopNotify called, returning error")
         raise NotSupportedException()
 
-    @dbus.service.signal(DBUS_PROP_IFACE, signature="sa{sv}as")
+    @dbus.service.signal(DBUS_PROPERTIES_INTERFACE, signature="sa{sv}as")
     def PropertiesChanged(self, interface, changed, invalidated):
         pass
 
@@ -209,7 +219,7 @@ class Descriptor(dbus.service.Object):
 
     def get_properties(self):
         return {
-            GATT_DESC_IFACE: {
+            GATT_DESCRIPTOR_INTERFACE: {
                 "Characteristic": self.chrc.get_path(),
                 "UUID": self.uuid,
                 "Flags": self.flags,
@@ -219,19 +229,19 @@ class Descriptor(dbus.service.Object):
     def get_path(self):
         return dbus.ObjectPath(self.path)
 
-    @dbus.service.method(DBUS_PROP_IFACE, in_signature="s", out_signature="a{sv}")
+    @dbus.service.method(DBUS_PROPERTIES_INTERFACE, in_signature="s", out_signature="a{sv}")
     def GetAll(self, interface):
-        if interface != GATT_DESC_IFACE:
+        if interface != GATT_DESCRIPTOR_INTERFACE:
             raise InvalidArgsException()
 
-        return self.get_properties()[GATT_DESC_IFACE]
+        return self.get_properties()[GATT_DESCRIPTOR_INTERFACE]
 
-    @dbus.service.method(GATT_DESC_IFACE, in_signature="a{sv}", out_signature="ay")
+    @dbus.service.method(GATT_DESCRIPTOR_INTERFACE, in_signature="a{sv}", out_signature="ay")
     def ReadValue(self, options):
         logger.info("Default ReadValue called, returning error")
         raise NotSupportedException()
 
-    @dbus.service.method(GATT_DESC_IFACE, in_signature="aya{sv}")
+    @dbus.service.method(GATT_DESCRIPTOR_INTERFACE, in_signature="aya{sv}")
     def WriteValue(self, value, options):
         logger.info("Default WriteValue called, returning error")
         raise NotSupportedException()
@@ -274,7 +284,7 @@ class Advertisement(dbus.service.Object):
 
         if self.data is not None:
             properties["Data"] = dbus.Dictionary(self.data, signature="yv")
-        return {LE_ADVERTISEMENT_IFACE: properties}
+        return {LE_ADVERTISEMENT_INTERFACE: properties}
 
     def get_path(self):
         return dbus.ObjectPath(self.path)
@@ -309,20 +319,19 @@ class Advertisement(dbus.service.Object):
             self.data = dbus.Dictionary({}, signature="yv")
         self.data[ad_type] = dbus.Array(data, signature="y")
 
-    @dbus.service.method(DBUS_PROP_IFACE, in_signature="s", out_signature="a{sv}")
+    @dbus.service.method(DBUS_PROPERTIES_INTERFACE, in_signature="s", out_signature="a{sv}")
     def GetAll(self, interface):
         logger.info("GetAll")
-        if interface != LE_ADVERTISEMENT_IFACE:
+        if interface != LE_ADVERTISEMENT_INTERFACE:
             raise InvalidArgsException()
         logger.info("returning props")
-        return self.get_properties()[LE_ADVERTISEMENT_IFACE]
+        return self.get_properties()[LE_ADVERTISEMENT_INTERFACE]
 
-    @dbus.service.method(LE_ADVERTISEMENT_IFACE, in_signature="", out_signature="")
+    @dbus.service.method(LE_ADVERTISEMENT_INTERFACE, in_signature="", out_signature="")
     def Release(self):
         logger.info("%s: Released!" % self.path)
 
 
-AGENT_INTERFACE = "org.bluez.Agent1"
 
 
 
@@ -355,13 +364,13 @@ class Agent(dbus.service.Object):
     def set_exit_on_release(self, exit_on_release):
         self.exit_on_release = exit_on_release
 
-    @dbus.service.method(AGENT_INTERFACE, in_signature="", out_signature="")
+    @dbus.service.method(BLUEZ_AGENT_INTERFACE, in_signature="", out_signature="")
     def Release(self):
         logger.info("Release")
         if self.exit_on_release:
             mainloop.quit()
 
-    @dbus.service.method(AGENT_INTERFACE, in_signature="os", out_signature="")
+    @dbus.service.method(BLUEZ_AGENT_INTERFACE, in_signature="os", out_signature="")
     def AuthorizeService(self, device, uuid):
         logger.info("AuthorizeService (%s, %s)" % (device, uuid))
         authorize = ask("Authorize connection (yes/no): ")
@@ -369,28 +378,28 @@ class Agent(dbus.service.Object):
             return
         raise Rejected("Connection rejected by user")
 
-    @dbus.service.method(AGENT_INTERFACE, in_signature="o", out_signature="s")
+    @dbus.service.method(BLUEZ_AGENT_INTERFACE, in_signature="o", out_signature="s")
     def RequestPinCode(self, device):
         logger.info("RequestPinCode (%s)" % (device))
         set_trusted(device)
         return ask("Enter PIN Code: ")
 
-    @dbus.service.method(AGENT_INTERFACE, in_signature="o", out_signature="u")
+    @dbus.service.method(BLUEZ_AGENT_INTERFACE, in_signature="o", out_signature="u")
     def RequestPasskey(self, device):
         logger.info("RequestPasskey (%s)" % (device))
         set_trusted(device)
         passkey = ask("Enter passkey: ")
         return dbus.UInt32(passkey)
 
-    @dbus.service.method(AGENT_INTERFACE, in_signature="ouq", out_signature="")
+    @dbus.service.method(BLUEZ_AGENT_INTERFACE, in_signature="ouq", out_signature="")
     def DisplayPasskey(self, device, passkey, entered):
         logger.info("DisplayPasskey (%s, %06u entered %u)" % (device, passkey, entered))
 
-    @dbus.service.method(AGENT_INTERFACE, in_signature="os", out_signature="")
+    @dbus.service.method(BLUEZ_AGENT_INTERFACE, in_signature="os", out_signature="")
     def DisplayPinCode(self, device, pincode):
         logger.info("DisplayPinCode (%s, %s)" % (device, pincode))
 
-    @dbus.service.method(AGENT_INTERFACE, in_signature="ou", out_signature="")
+    @dbus.service.method(BLUEZ_AGENT_INTERFACE, in_signature="ou", out_signature="")
     def RequestConfirmation(self, device, passkey):
         logger.info("RequestConfirmation (%s, %06d)" % (device, passkey))
         confirm = ask("Confirm passkey (yes/no): ")
@@ -399,7 +408,7 @@ class Agent(dbus.service.Object):
             return
         raise Rejected("Passkey doesn't match")
 
-    @dbus.service.method(AGENT_INTERFACE, in_signature="o", out_signature="")
+    @dbus.service.method(BLUEZ_AGENT_INTERFACE, in_signature="o", out_signature="")
     def RequestAuthorization(self, device):
         logger.info("RequestAuthorization (%s)" % (device))
         auth = ask("Authorize? (yes/no): ")
@@ -407,6 +416,6 @@ class Agent(dbus.service.Object):
             return
         raise Rejected("Pairing rejected")
 
-    @dbus.service.method(AGENT_INTERFACE, in_signature="", out_signature="")
+    @dbus.service.method(BLUEZ_AGENT_INTERFACE, in_signature="", out_signature="")
     def Cancel(self):
         logger.info("Cancel")

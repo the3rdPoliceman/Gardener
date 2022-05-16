@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
  
 import logging
+import struct
+import array
+import sys
+from enum import Enum
 
 import dbus
 import dbus.exceptions
@@ -17,11 +21,6 @@ from ble import (
     Agent,
 )
 
-import struct
-import array
-from enum import Enum
-
-import sys
 
 MainLoop = None
 try:
@@ -33,15 +32,21 @@ except ImportError:
 
     MainLoop = GObject.MainLoop
 
+
+#set up logging
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+logHandler = logging.StreamHandler()
+logHandler.setFormatter(formatter)
+
+filelogHandler = logging.FileHandler("gardener.log")
+filelogHandler.setFormatter(formatter)
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-logHandler = logging.StreamHandler()
-filelogHandler = logging.FileHandler("logs.log")
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logHandler.setFormatter(formatter)
-filelogHandler.setFormatter(formatter)
-logger.addHandler(filelogHandler)
 logger.addHandler(logHandler)
+logger.addHandler(filelogHandler)
+
 
 mainloop = None
 
@@ -49,28 +54,11 @@ BLUEZ_SERVICE_NAME = "org.bluez"
 GATT_MANAGER_IFACE = "org.bluez.GattManager1"
 LE_ADVERTISEMENT_IFACE = "org.bluez.LEAdvertisement1"
 LE_ADVERTISING_MANAGER_IFACE = "org.bluez.LEAdvertisingManager1"
-
 MANUFACTURER_DAVE = [0x64, 0x61, 0x76, 0x65]
-
-
-class InvalidArgsException(dbus.exceptions.DBusException):
-    _dbus_error_name = "org.freedesktop.DBus.Error.InvalidArgs"
-
-
-class NotSupportedException(dbus.exceptions.DBusException):
-    _dbus_error_name = "org.bluez.Error.NotSupported"
 
 
 class NotPermittedException(dbus.exceptions.DBusException):
     _dbus_error_name = "org.bluez.Error.NotPermitted"
-
-
-class InvalidValueLengthException(dbus.exceptions.DBusException):
-    _dbus_error_name = "org.bluez.Error.InvalidValueLength"
-
-
-class FailedException(dbus.exceptions.DBusException):
-    _dbus_error_name = "org.bluez.Error.Failed"
 
 
 def register_application_callback():
