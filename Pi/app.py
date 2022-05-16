@@ -80,7 +80,7 @@ def register_app_cb():
 
 
 def register_app_error_cb(error):
-    logger.critical("Failed to register application: " + str(error))
+    logger.critical("Failed to register the application: " + str(error))
     mainloop.quit()
 
 
