@@ -50,6 +50,8 @@ GATT_MANAGER_IFACE = "org.bluez.GattManager1"
 LE_ADVERTISEMENT_IFACE = "org.bluez.LEAdvertisement1"
 LE_ADVERTISING_MANAGER_IFACE = "org.bluez.LEAdvertisingManager1"
 
+MANUFACTURER_DAVE = [0x64, 0x61, 0x76, 0x65]
+
 
 class InvalidArgsException(dbus.exceptions.DBusException):
     _dbus_error_name = "org.freedesktop.DBus.Error.InvalidArgs"
@@ -176,7 +178,7 @@ class GardenerAdvertisement(Advertisement):
     def __init__(self, bus, index):
         Advertisement.__init__(self, bus, index, "peripheral")
         self.add_manufacturer_data(
-            0xFFFF, [0x64, 0x61, 0x76, 0x65],
+            0xFFFF, MANUFACTURER_DAVE,
         )
         self.add_service_uuid(GardenerService.GARDENER_SVC_UUID)
         self.add_local_name("Gardener")
@@ -242,7 +244,7 @@ def main():
         reply_handler=register_application_callback,
         error_handler=[register_application_error_callback],
     )
-
+    
     agent_manager.RequestDefaultAgent(AGENT_PATH)
 
     mainloop.run()
