@@ -22,39 +22,12 @@ from ble import (
 )
 
 
-MainLoop = None
-try:
-    from gi.repository import GLib
-
-    MainLoop = GLib.MainLoop
-except ImportError:
-    import gobject as GObject
-
-    MainLoop = GObject.MainLoop
-
-
-#set up logging
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-
-logHandler = logging.StreamHandler()
-logHandler.setFormatter(formatter)
-
-filelogHandler = logging.FileHandler("gardener.log")
-filelogHandler.setFormatter(formatter)
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-logger.addHandler(logHandler)
-logger.addHandler(filelogHandler)
-
-
-mainloop = None
-
 BLUEZ_SERVICE_NAME = "org.bluez"
 GATT_MANAGER_IFACE = "org.bluez.GattManager1"
 LE_ADVERTISEMENT_IFACE = "org.bluez.LEAdvertisement1"
 LE_ADVERTISING_MANAGER_IFACE = "org.bluez.LEAdvertisingManager1"
 MANUFACTURER_DAVE = [0x64, 0x61, 0x76, 0x65]
+AGENT_PATH = "/dave/agent"
 
 
 class NotPermittedException(dbus.exceptions.DBusException):
@@ -182,7 +155,33 @@ def register_advertisement_error_callback(error):
     mainloop.quit()
 
 
-AGENT_PATH = "/dave/agent"
+MainLoop = None
+try:
+    from gi.repository import GLib
+
+    MainLoop = GLib.MainLoop
+except ImportError:
+    import gobject as GObject
+
+    MainLoop = GObject.MainLoop
+
+
+#set up logging
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+logHandler = logging.StreamHandler()
+logHandler.setFormatter(formatter)
+
+filelogHandler = logging.FileHandler("gardener.log")
+filelogHandler.setFormatter(formatter)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(logHandler)
+logger.addHandler(filelogHandler)
+
+
+mainloop = None
 
 
 def main():
